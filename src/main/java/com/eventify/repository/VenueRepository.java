@@ -2,7 +2,7 @@ package com.eventify.repository;
 
 import com.eventify.model.VenueModel;
 
-import org.springframework.data.domain.Limit;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
