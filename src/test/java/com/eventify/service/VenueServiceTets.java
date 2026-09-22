@@ -2,6 +2,7 @@ package com.eventify.service;
 
 import com.eventify.exception.DuplicateException;
 import com.eventify.exception.EmptyException;
+import com.eventify.exception.NotFoundException;
 import com.eventify.model.VenueModel;
 import com.eventify.repository.VenueRepository;
 import org.junit.jupiter.api.Test;
@@ -9,8 +10,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -26,9 +32,8 @@ class VenueServiceTest {
 
     @Test
     void debeCrearVenueValido() {
-        VenueModel venue = new VenueModel(null, "Teatro Test", "Barranquilla", 500L);
+        VenueModel venue = new VenueModel(null, "Teatro Test", "Barranquilla", 500);
 
-        when(venueRepository.existsById(null)).thenReturn(false);
         when(venueRepository.existsByNombre("Teatro Test")).thenReturn(false);
         when(venueRepository.save(any(VenueModel.class))).thenReturn(venue);
 
@@ -40,28 +45,8 @@ class VenueServiceTest {
     }
 
     @Test
-    void debeLanzarExcepcionSiIdEsMenorOIgualACero() {
-        VenueModel venue = new VenueModel(0L, "Teatro Test", "Barranquilla", 500L);
-
-        assertThrows(EmptyException.class, () -> venueService.createVenue(venue));
-        verify(venueRepository, never()).save(any());
-    }
-
-    @Test
-    void debeLanzarExcepcionSiIdYaExiste() {
-        VenueModel venue = new VenueModel(1L, "Teatro Test", "Barranquilla", 500L);
-
-        when(venueRepository.existsById(1L)).thenReturn(true);
-
-        assertThrows(DuplicateException.class, () -> venueService.createVenue(venue));
-        verify(venueRepository, never()).save(any());
-    }
-
-    @Test
     void debeLanzarExcepcionSiNombreEsVacio() {
-        VenueModel venue = new VenueModel(null, "", "Barranquilla", 500L);
-
-        when(venueRepository.existsById(null)).thenReturn(false);
+        VenueModel venue = new VenueModel(null, "", "Barranquilla", 500);
 
         assertThrows(EmptyException.class, () -> venueService.createVenue(venue));
         verify(venueRepository, never()).save(any());
@@ -69,9 +54,8 @@ class VenueServiceTest {
 
     @Test
     void debeLanzarExcepcionSiNombreYaExiste() {
-        VenueModel venue = new VenueModel(null, "Teatro Existente", "Barranquilla", 500L);
+        VenueModel venue = new VenueModel(null, "Teatro Existente", "Barranquilla", 500);
 
-        when(venueRepository.existsById(null)).thenReturn(false);
         when(venueRepository.existsByNombre("Teatro Existente")).thenReturn(true);
 
         assertThrows(DuplicateException.class, () -> venueService.createVenue(venue));
@@ -80,9 +64,8 @@ class VenueServiceTest {
 
     @Test
     void debeLanzarExcepcionSiDireccionEsVacia() {
-        VenueModel venue = new VenueModel(null, "Teatro Test", "", 500L);
+        VenueModel venue = new VenueModel(null, "Teatro Test", "", 500);
 
-        when(venueRepository.existsById(null)).thenReturn(false);
         when(venueRepository.existsByNombre("Teatro Test")).thenReturn(false);
 
         assertThrows(EmptyException.class, () -> venueService.createVenue(venue));
@@ -93,7 +76,6 @@ class VenueServiceTest {
     void debeLanzarExcepcionSiCapacidadEsNula() {
         VenueModel venue = new VenueModel(null, "Teatro Test", "Barranquilla", null);
 
-        when(venueRepository.existsById(null)).thenReturn(false);
         when(venueRepository.existsByNombre("Teatro Test")).thenReturn(false);
 
         assertThrows(EmptyException.class, () -> venueService.createVenue(venue));
@@ -101,35 +83,57 @@ class VenueServiceTest {
     }
 
     @Test
-    void debeRetornarListaVaciaSiNoHayVenues() {
-        when(venueRepository.findAll()).thenReturn(List.of());
+    void debeRetornarPaginaVaciaSiNoHayVenues() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<VenueModel> paginaVacia = new PageImpl<>(List.of());
 
-        List<VenueModel> resultado = venueService.findAllVenues();
+        when(venueRepository.findAll(pageable)).thenReturn(paginaVacia);
+
+        Page<VenueModel> resultado = venueService.findAllVenues(pageable);
 
         assertTrue(resultado.isEmpty());
     }
 
     @Test
+    void debeRetornarVenuePorId() {
+        VenueModel venue = new VenueModel(1L, "Teatro Test", "Barranquilla", 500);
+
+        when(venueRepository.findById(1L)).thenReturn(Optional.of(venue));
+
+        VenueModel resultado = venueService.findById(1L);
+
+        assertEquals("Teatro Test", resultado.getNombre());
+    }
+
+    @Test
+    void debeLanzarExcepcionSiIdNoExisteAlBuscar() {
+        when(venueRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(NotFoundException.class, () -> venueService.findById(99L));
+    }
+
+    @Test
     void debeActualizarVenueValido() {
-        VenueModel venue = new VenueModel(1L, "Teatro Actualizado", "Barranquilla", 600L);
+        VenueModel venue = new VenueModel(1L, "Teatro Actualizado", "Barranquilla", 600);
 
         when(venueRepository.existsById(1L)).thenReturn(true);
-        when(venueRepository.existsByNombreExcludingId("Teatro Actualizado", 1L)).thenReturn(false);
+        when(venueRepository.existsByNombreAndIdNot("Teatro Actualizado", 1L)).thenReturn(false);
+        when(venueRepository.save(venue)).thenReturn(venue);
 
         VenueModel resultado = venueService.updateVenue(venue);
 
         assertEquals("Teatro Actualizado", resultado.getNombre());
-        verify(venueRepository, times(1)).update(venue);
+        verify(venueRepository, times(1)).save(venue);
     }
 
     @Test
     void debeLanzarExcepcionAlActualizarSiIdNoExiste() {
-        VenueModel venue = new VenueModel(99L, "Teatro X", "Barranquilla", 500L);
+        VenueModel venue = new VenueModel(99L, "Teatro X", "Barranquilla", 500);
 
         when(venueRepository.existsById(99L)).thenReturn(false);
 
-        assertThrows(EmptyException.class, () -> venueService.updateVenue(venue));
-        verify(venueRepository, never()).update(any());
+        assertThrows(NotFoundException.class, () -> venueService.updateVenue(venue));
+        verify(venueRepository, never()).save(any());
     }
 
     @Test
@@ -151,7 +155,7 @@ class VenueServiceTest {
     void debeLanzarExcepcionAlEliminarSiIdNoExiste() {
         when(venueRepository.existsById(99L)).thenReturn(false);
 
-        assertThrows(EmptyException.class, () -> venueService.deleteVenue(99L));
+        assertThrows(NotFoundException.class, () -> venueService.deleteVenue(99L));
         verify(venueRepository, never()).deleteById(any());
     }
 }

@@ -2,12 +2,16 @@ package com.eventify.service;
 
 import com.eventify.exception.DuplicateException;
 import com.eventify.exception.EmptyException;
+import com.eventify.exception.FutureException;
+import com.eventify.exception.NotFoundException;
 import com.eventify.model.EventsModel;
 import com.eventify.repository.EventsRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.List;
+import java.util.Optional;
 
 @Service
 public class EventsService {
@@ -17,12 +21,6 @@ public class EventsService {
         this.eventsRepository = eventsRepository;
     }
     public EventsModel createEvents(EventsModel event) {
-        if(event.getId() != null && event.getId() <= 0){
-            throw new EmptyException("El id del evento tiene que ser mayor a cero");
-        }
-        if (eventsRepository.existsById(event.getId())) {
-            throw new DuplicateException("El evento ya existe");
-        }
         if(event.getNombre() == null || event.getNombre().isBlank()) {
             throw new EmptyException("El nombre del evento no puede estar vacio");
         }
@@ -32,23 +30,27 @@ public class EventsService {
         if(event.getFecha() == null) {
             throw new EmptyException("La fecha del evento no puede estar vacia");
         }
-        if(eventsRepository.existsByNameAndByFecha(event.getNombre(), event.getFecha())){
+        if(eventsRepository.existsByNombreAndFecha( event.getNombre(), event.getFecha())) {
             throw new DuplicateException("Este evento ya tiene una fecha asignada");
+        }
+        if(!event.getFecha().isAfter(LocalDate.now())) {
+            throw new FutureException("La fecha del evento debe ser posterior");
         }
         return eventsRepository.save(event);
     }
-    public List<EventsModel> findAllEvents() {
-        return eventsRepository.findAll();
+    public Page<EventsModel> findAllEvents(Pageable pageable) {
+        return eventsRepository.findAll(pageable);
     }
-    public List<EventsModel> findByFecha(LocalDate fecha) {
-        return eventsRepository.findByFecha(fecha);
+    public EventsModel findById(Long id) {
+        return eventsRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("No se encontró un evento con ese id: " + id));
     }
     public EventsModel update(EventsModel event) {
         if(event.getId() == null){
             throw new EmptyException("El id del evento no puede estar vacio");
         }
         if(!eventsRepository.existsById(event.getId())){
-            throw new EmptyException("No existe el evento con el id: " + event.getId());
+            throw new NotFoundException("No se encontro un evento con ese id: " + event.getId());
         }
         if(event.getNombre() == null || event.getNombre().isBlank()) {
             throw new EmptyException("El nombre del evento no puede estar vacio");
@@ -59,18 +61,17 @@ public class EventsService {
         if(event.getFecha() == null) {
             throw new EmptyException("La fecha no puede estar vacia");
         }
-        if(eventsRepository.existsByNameAndByFechaExcludingId(event.getNombre(), event.getFecha(), event.getId())){
+        if(eventsRepository.existsByNombreAndFechaAndIdNot(event.getNombre(), event.getFecha(), event.getId())){
             throw new DuplicateException("Este evento ya tiene una fecha asignada");
         }
-        eventsRepository.update(event);
-        return event;
+        return eventsRepository.save(event);
     }
     public void deleteEvents(Long id){
         if(id == null){
             throw new EmptyException("El id del evento a eliminar no puede estar vacio");
         }
         if(!eventsRepository.existsById(id)){
-            throw new EmptyException("No existe el evento con el id: " + id);
+            throw new NotFoundException("No se encontro un evento con ese id: " + id);
         }
         eventsRepository.deleteById(id);
     }

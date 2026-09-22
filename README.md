@@ -1,6 +1,6 @@
  # Eventify
 
-API REST para gestionar eventos y los lugares donde se realizan. El proyecto ofrece operaciones CRUD, búsquedas básicas y una documentación interactiva mediante OpenAPI/Swagger.
+API REST para gestionar eventos y los lugares donde se realizan. El proyecto ofrece operaciones CRUD, consultas paginadas, validaciones de negocio y documentación interactiva mediante OpenAPI/Swagger.
 
 **Autor:** Juan Vargas
 
@@ -8,13 +8,13 @@ API REST para gestionar eventos y los lugares donde se realizan. El proyecto ofr
 
 Eventify centraliza la administración de un catálogo de eventos y lugares. Permite registrar la información principal de cada entidad, consultarla, actualizarla y eliminarla desde una API HTTP.
 
-Actualmente la aplicación utiliza almacenamiento en memoria, por lo que los datos se reinician cada vez que se detiene o vuelve a iniciar el servidor. Al arrancar, se cargan automáticamente tres eventos y tres lugares de ejemplo.
+Actualmente la aplicación utiliza Spring Data JPA para persistir los datos en PostgreSQL. Las credenciales y la URL de conexión se leen desde variables de entorno definidas en `.env`. La configuración de carga automática de datos de ejemplo está presente, pero permanece desactivada.
 
 ## Problemas que resuelve
 
 - Evita llevar el control de eventos y lugares en archivos o registros manuales.
-- Permite consultar rápidamente los eventos programados para una fecha.
-- Permite localizar lugares por dirección.
+- Permite consultar eventos y lugares mediante listados paginados.
+- Permite localizar un evento o lugar por su identificador.
 - Centraliza las reglas de validación para nombres, fechas, descripciones, direcciones e identificadores.
 - Evita duplicar lugares por nombre y eventos con el mismo nombre y fecha.
 - Expone una API documentada que puede consumirse desde Postman, Swagger UI u otra aplicación cliente.
@@ -28,7 +28,9 @@ Actualmente la aplicación utiliza almacenamiento en memoria, por lo que los dat
 - Lombok para generar constructores, getters y setters.
 - SpringDoc OpenAPI 3.1.0 para la documentación y prueba de endpoints.
 - JUnit 5, Mockito y Spring Boot Test para las pruebas.
-- Colecciones en memoria (`ArrayList`) y `AtomicLong` para los repositorios actuales.
+- PostgreSQL como base de datos principal.
+- Spring Data JPA para entidades, repositorios y persistencia.
+- H2 para las pruebas de repositorio.
 
 ## Arquitectura
 
@@ -48,15 +50,15 @@ Respuesta JSON
 - **View:** la representación se entrega mediante respuestas JSON de la API REST.
 - **Controller:** `EventsController` y `VenueController` reciben las peticiones HTTP y devuelven las respuestas.
 - **Service:** `EventsService` y `VenueService` contienen las reglas de negocio, validaciones y operaciones CRUD.
-- **Repository:** `EventsRepository` y `VenueRepository` gestionan la consulta y persistencia temporal en memoria.
-- **Exception handler:** `GloblalExceptionHandler` centraliza el manejo de `EmptyException` y `DuplicateException`.
+- **Repository:** `EventsRepository` y `VenueRepository` gestionan la consulta y persistencia mediante Spring Data JPA.
+- **Exception handler:** `GloblalExceptionHandler` centraliza los errores de validación, duplicados, fechas inválidas y recursos no encontrados.
 
 El flujo general de una petición es:
 
 1. El cliente envía una petición HTTP a un `Controller`.
 2. El `Controller` delega la operación al `Service` correspondiente.
 3. El `Service` valida los datos y aplica las reglas de negocio.
-4. El `Repository` consulta o modifica los datos almacenados en memoria.
+4. El `Repository` consulta o modifica los datos almacenados en PostgreSQL.
 5. El `Controller` devuelve una respuesta JSON con el código HTTP correspondiente.
 
 ## Requisitos previos
@@ -66,9 +68,22 @@ Antes de instalar el proyecto necesitas:
 1. Git instalado y disponible en la terminal.
 2. JDK 17 instalado y configurado en `JAVA_HOME`.
 3. Una terminal compatible con el sistema operativo.
-4. Opcionalmente, Postman o un navegador para probar la API y Swagger UI.
+4. PostgreSQL disponible y una base de datos creada para Eventify.
+5. Opcionalmente, Postman o un navegador para probar la API y Swagger UI.
 
-No es necesario instalar una base de datos para ejecutar la versión actual.
+La aplicación carga las variables de conexión desde un archivo `.env` local, que está excluido del repositorio mediante `.gitignore`.
+
+### Variables de entorno
+
+Crea un archivo `.env` en la raíz del proyecto con valores adecuados para tu instalación:
+
+```dotenv
+DB_URL=jdbc:postgresql://localhost:5432/eventify
+DB_USERNAME=postgres
+DB_PASSWORD=tu_contraseña
+```
+
+No subas este archivo al repositorio. Contiene credenciales y Git lo ignora automáticamente.
 
 ## Clonar el proyecto
 
@@ -224,7 +239,7 @@ La API maneja los siguientes métodos:
 | `id` | `Long` | Identificador único. Si se omite al crear, se genera automáticamente. |
 | `nombre` | `String` | Nombre del lugar. Obligatorio y no repetido. |
 | `direccion` | `String` | Dirección o ciudad del lugar. Obligatoria. |
-| `capacidad` | `Long` | Capacidad máxima del lugar. Obligatoria. |
+| `capacidad` | `Integer` | Capacidad máxima del lugar. Obligatoria. |
 
 ## Endpoints y operaciones CRUD
 
@@ -232,16 +247,18 @@ La API maneja los siguientes métodos:
 
 | Operación | Método y ruta | Código exitoso | Descripción |
 |---|---|---:|---|
-| Crear | `POST /api/events` | `201 Created` | Registra un evento. |
-| Consultar todos | `GET /api/events` | `200 OK` | Devuelve todos los eventos. |
-| Buscar por fecha | `GET /api/events/buscar?fecha=2026-10-15` | `200 OK` | Filtra eventos por fecha. |
-| Actualizar | `PUT /api/events` | `200 OK` | Actualiza el evento indicado por `id`. |
+| Crear | `POST /api/events/crear` | `201 Created` | Registra un evento. |
+| Consultar todos | `GET /api/events` | `200 OK` | Devuelve una página de eventos. |
+| Buscar por ID | `GET /api/events/{id}` | `200 OK` | Devuelve un evento existente. |
+| Actualizar | `PUT /api/events/{id}` | `200 OK` | Actualiza el evento indicado por `id`. |
 | Eliminar | `DELETE /api/events/{id}` | `204 No Content` | Elimina el evento indicado por `id`. |
+
+Los listados admiten los parámetros `page` (comienza en `0`), `size` (por defecto `10`) y `sort`, por ejemplo `?page=0&size=10&sort=nombre,asc`.
 
 Ejemplo para crear un evento:
 
 ```bash
-curl -X POST http://localhost:8080/api/events \
+curl -X POST http://localhost:8080/api/events/crear \
 	-H "Content-Type: application/json" \
 	-d '{"nombre":"Conferencia Java","fecha":"2026-12-10","descripcion":"Conferencia sobre Java y Spring Boot"}'
 ```
@@ -252,16 +269,18 @@ curl -X POST http://localhost:8080/api/events \
 
 | Operación | Método y ruta | Código exitoso | Descripción |
 |---|---|---:|---|
-| Crear | `POST /api/Venue/create` | `201 Created` | Registra un lugar. |
-| Consultar todos | `GET /api/Venue` | `200 OK` | Devuelve todos los lugares. |
-| Buscar por dirección | `GET /api/Venue/buscar?direccion=Barranquilla` | `200 OK` | Filtra lugares por dirección exacta. |
+| Crear | `POST /api/Venue/crear` | `201 Created` | Registra un lugar. |
+| Consultar todos | `GET /api/Venue` | `200 OK` | Devuelve una página de lugares. |
+| Buscar por ID | `GET /api/Venue/{id}` | `200 OK` | Devuelve un lugar existente. |
 | Actualizar | `PUT /api/Venue` | `200 OK` | Actualiza el lugar indicado por `id`. |
 | Eliminar | `DELETE /api/Venue/{id}` | `204 No Content` | Elimina el lugar indicado por `id`. |
+
+Los listados admiten `page`, `size` y `sort`, con los mismos valores por defecto que el listado de eventos.
 
 Ejemplo para crear un lugar:
 
 ```bash
-curl -X POST http://localhost:8080/api/Venue/create \
+curl -X POST http://localhost:8080/api/Venue/crear \
 	-H "Content-Type: application/json" \
 	-d '{"nombre":"Auditorio Central","direccion":"Barranquilla","capacidad":800}'
 ```
@@ -269,12 +288,12 @@ curl -X POST http://localhost:8080/api/Venue/create \
 ## Cómo utilizar correctamente la API
 
 1. Inicia la aplicación y espera el mensaje de Spring Boot que confirma que el servidor está escuchando en el puerto `8080`.
-2. Consulta `GET /api/events` o `GET /api/Venue` para revisar los datos iniciales.
+2. Consulta `GET /api/events` o `GET /api/Venue` para revisar los registros almacenados.
 3. Para crear registros, envía JSON con `Content-Type: application/json` y no incluyas un `id` salvo que necesites asignarlo manualmente.
 4. Para actualizar, incluye un `id` existente y todos los campos obligatorios en el cuerpo de la petición.
 5. Usa fechas con formato ISO `YYYY-MM-DD`, por ejemplo `2026-10-15`.
 6. Usa el identificador correcto en la URL al eliminar un registro.
-7. Si vuelves a iniciar la aplicación, los datos regresarán a los valores precargados porque el almacenamiento es temporal y está en memoria.
+7. Los cambios se persisten en PostgreSQL; los registros no se reinician al detener la aplicación.
 
 Ejemplo para actualizar un evento:
 
@@ -288,13 +307,16 @@ curl -X PUT http://localhost:8080/api/events \
 
 La capa de servicio valida los datos antes de guardarlos o modificarlos:
 
-- `EmptyException`: se lanza cuando falta un dato obligatorio, el `id` no existe, el `id` es inválido al crear o se intenta eliminar un registro inexistente.
-- `DuplicateException`: se lanza cuando se repite un identificador, el nombre de un lugar o la combinación de nombre y fecha de un evento.
+- `EmptyException`: se lanza cuando falta un dato obligatorio o un identificador necesario.
+- `DuplicateException`: se lanza cuando se repite el nombre de un lugar o la combinación de nombre y fecha de un evento.
+- `FutureException`: se lanza cuando la fecha de un evento no es posterior a la fecha actual.
+- `NotFoundException`: se lanza cuando no existe el evento o lugar solicitado.
 
-`GloblalExceptionHandler` captura ambas excepciones mediante `@RestControllerAdvice` y responde con:
+`GloblalExceptionHandler` captura estas excepciones mediante `@RestControllerAdvice` y responde con:
 
-- HTTP `400 Bad Request`.
-- Un cuerpo de respuesta con el mensaje descriptivo de la validación.
+- HTTP `400 Bad Request` para errores de validación, datos vacíos, duplicados o fechas inválidas.
+- HTTP `404 Not Found` cuando no existe el recurso solicitado.
+- Un cuerpo de respuesta con el mensaje descriptivo o un mapa de errores de validación.
 
 Las operaciones exitosas responden con `201` al crear, `200` al consultar o actualizar y `204` al eliminar.
 
@@ -312,7 +334,7 @@ En Windows:
 .\mvnw.cmd test
 ```
 
-Las pruebas cubren el contexto de Spring Boot y las reglas principales de los servicios de eventos y lugares, incluyendo creación, actualización, eliminación, duplicados y datos obligatorios.
+Las pruebas cubren el contexto de Spring Boot, los repositorios JPA y las reglas principales de los servicios de eventos y lugares, incluyendo creación, consulta, actualización, eliminación, duplicados y datos obligatorios.
 
 ## Árbol de archivos
 
@@ -348,6 +370,9 @@ Eventify/
 │   │   └── resources/
 │   │       └── application.properties
 │   └── test/java/com/eventify/
+│       ├── repository/
+│       │   ├── EventsRepositoryTest.java
+│       │   └── VenueRepositoryTest.java
 │       ├── service/
 │       │   ├── EventsServiceTest.java
 │       │   └── VenueServiceTets.java
@@ -362,7 +387,8 @@ Eventify/
 
 ## Limitaciones actuales
 
-- Los datos se guardan únicamente en memoria y no persisten entre ejecuciones.
+- La aplicación requiere una instancia de PostgreSQL y variables de entorno configuradas.
 - No hay autenticación ni autorización configuradas.
 - La aplicación no define un puerto personalizado; utiliza el puerto `8080` por defecto.
-- La búsqueda por dirección compara el valor recibido de forma exacta.
+- Los métodos de búsqueda por nombre de los repositorios todavía no están expuestos como endpoints HTTP.
+- El endpoint de actualización de lugares está declarado como `PUT /api/Venue`, aunque su método recibe un `id` mediante `@PathVariable`; esta ruta debe revisarse antes de consumirla.
