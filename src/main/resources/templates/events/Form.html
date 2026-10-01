@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${event.id} != null ? 'Editar evento' : 'Nuevo evento'">Eventify</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-5" style="max-width: 500px">
+    <h1 class="mb-4" th:text="${event.id} != null ? 'Editar evento' : 'Nuevo Evento'"></h1>
+    <form th:action="${event.id} != null ? '/admin/events/' + ${event.id} + '/actualizar' : '/admin/events/crear'"
+          th:object="${event}" method="post">
+        <div class="mb-3">
+            <label class="form-label">Nombre</label>
+            <input type="text" class="form-control" th:field="*{nombre}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Fecha</label>
+            <input type="date" class="form-control" th:field="*{fecha}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <input type="text" class="form-control" th:field="*{descripcion}" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <a th:href="@{/admin/events}" class="btn btn-secondary">Cancelar</a>
+    </form>
+</div>
+</body>
+</html>

@@ -38,7 +38,7 @@ public class VenueService {
     }
     public VenueModel findById(Long id) {
         return venueRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("La venue no existe un lugar con el id: " + id));
+                .orElseThrow(() -> new NotFoundException("No existe un lugar con el id: " + id));
     }
     public VenueModel updateVenue(VenueModel venue){
         if(venue.getId() == null) {

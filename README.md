@@ -1,14 +1,12 @@
  # Eventify
 
-API REST para gestionar eventos y los lugares donde se realizan. El proyecto ofrece operaciones CRUD, consultas paginadas, validaciones de negocio y documentación interactiva mediante OpenAPI/Swagger.
+Aplicación web para gestionar eventos y los lugares donde se realizan. Ofrece una interfaz administrativa con Thymeleaf, una API REST con operaciones CRUD y consultas paginadas, validaciones de negocio y documentación OpenAPI/Swagger.
 
 **Autor:** Juan Vargas
 
 ## Descripción del proyecto
 
-Eventify centraliza la administración de un catálogo de eventos y lugares. Permite registrar la información principal de cada entidad, consultarla, actualizarla y eliminarla desde una API HTTP.
-
-Actualmente la aplicación utiliza Spring Data JPA para persistir los datos en PostgreSQL. Las credenciales y la URL de conexión se leen desde variables de entorno definidas en `.env`. La configuración de carga automática de datos de ejemplo está presente, pero permanece desactivada.
+Eventify centraliza la administración de un catálogo de eventos y lugares. Los coordinadores pueden consultar y gestionar los registros desde una interfaz web; los clientes también pueden acceder a las operaciones mediante la API REST. Los datos se persisten en PostgreSQL. Las credenciales y la URL de conexión se leen desde variables de entorno definidas en `.env`. La configuración de carga automática de datos de ejemplo está presente, pero permanece desactivada.
 
 ## Problemas que resuelve
 
@@ -23,7 +21,8 @@ Actualmente la aplicación utiliza Spring Data JPA para persistir los datos en P
 
 - Java 17.
 - Spring Boot 4.1.1.
-- Spring Web MVC para la creación de la API REST.
+- Spring Web MVC para los controladores REST y de interfaz.
+- Thymeleaf para renderizar las vistas HTML de la interfaz administrativa.
 - Maven y Maven Wrapper para la gestión del proyecto y sus dependencias.
 - Lombok para generar constructores, getters y setters.
 - SpringDoc OpenAPI 3.1.0 para la documentación y prueba de endpoints.
@@ -34,32 +33,29 @@ Actualmente la aplicación utiliza Spring Data JPA para persistir los datos en P
 
 ## Arquitectura
 
-Eventify utiliza una arquitectura basada en **MVC (Model-View-Controller)**, adaptada a una API REST y organizada en capas. La aplicación no tiene vistas HTML tradicionales; sus respuestas JSON funcionan como representación para los clientes HTTP.
+Eventify utiliza **MVC (Model-View-Controller)** y separa las rutas de la API REST de las rutas de la interfaz web.
 
 ```text
-Cliente HTTP
-	|
-	v
-Controller  ->  Service  ->  Repository  ->  Model
-	|
-	v
-Respuesta JSON
+Navegador -> Web Controller (/admin) -> Service -> Repository -> PostgreSQL
+			  |                         |
+			  v                         v
+		Vista Thymeleaf              Modelos JPA
+
+Cliente HTTP -> REST Controller (/api) -> Service -> Repository -> PostgreSQL
+				   |
+				   v
+			   Respuesta JSON
 ```
 
 - **Model:** `EventsModel` y `VenueModel` representan las entidades y sus datos.
-- **View:** la representación se entrega mediante respuestas JSON de la API REST.
-- **Controller:** `EventsController` y `VenueController` reciben las peticiones HTTP y devuelven las respuestas.
+- **View:** las plantillas Thymeleaf de `src/main/resources/templates` renderizan HTML para la interfaz administrativa; la API devuelve JSON.
+- **Controladores web:** `EventsWebController` y `VenueWebController` gestionan las páginas y formularios bajo `/admin`.
+- **Controladores REST:** `EventsController` y `VenueController` exponen las operaciones JSON bajo `/api`.
 - **Service:** `EventsService` y `VenueService` contienen las reglas de negocio, validaciones y operaciones CRUD.
 - **Repository:** `EventsRepository` y `VenueRepository` gestionan la consulta y persistencia mediante Spring Data JPA.
 - **Exception handler:** `GloblalExceptionHandler` centraliza los errores de validación, duplicados, fechas inválidas y recursos no encontrados.
 
-El flujo general de una petición es:
-
-1. El cliente envía una petición HTTP a un `Controller`.
-2. El `Controller` delega la operación al `Service` correspondiente.
-3. El `Service` valida los datos y aplica las reglas de negocio.
-4. El `Repository` consulta o modifica los datos almacenados en PostgreSQL.
-5. El `Controller` devuelve una respuesta JSON con el código HTTP correspondiente.
+En la interfaz web, los formularios envían datos mediante `POST` y el controlador redirige al listado después de procesarlos (Post/Redirect/Get). Los listados muestran mensajes cuando no hay registros. En la API REST, los controladores devuelven respuestas JSON con el código HTTP correspondiente.
 
 ## Requisitos previos
 
@@ -211,6 +207,21 @@ Con la aplicación ejecutándose, abre:
 - Especificación OpenAPI: `http://localhost:8080/v3/api-docs`
 
 Swagger UI permite revisar los contratos y ejecutar las peticiones directamente desde el navegador.
+La documentación está limitada a las rutas `/api/**`; las páginas de la interfaz bajo `/admin/**` no forman parte del contrato OpenAPI.
+
+## Interfaz administrativa
+
+Con la aplicación ejecutándose, abre `http://localhost:8080/` para acceder a la página de inicio.
+
+| Página | Ruta | Funcionalidad |
+|---|---|---|
+| Inicio | `/` | Enlaces a los listados de eventos y lugares. |
+| Eventos | `/admin/events` | Listado paginado, búsqueda por ID y acciones para crear, editar o eliminar eventos. Si no hay eventos, muestra “Actualmente no hay eventos programados”. |
+| Nuevo evento | `/admin/events/nuevo` | Formulario para registrar un evento. |
+| Lugares | `/admin/venue` | Listado paginado, búsqueda por ID y acciones para crear, editar o eliminar lugares. |
+| Nuevo lugar | `/admin/venue/nuevo` | Formulario para registrar un lugar. |
+
+Después de guardar, actualizar o eliminar un registro, la interfaz redirige al listado y muestra un mensaje del resultado.
 
 ## Métodos HTTP manejados
 
@@ -272,7 +283,7 @@ curl -X POST http://localhost:8080/api/events/crear \
 | Crear | `POST /api/Venue/crear` | `201 Created` | Registra un lugar. |
 | Consultar todos | `GET /api/Venue` | `200 OK` | Devuelve una página de lugares. |
 | Buscar por ID | `GET /api/Venue/{id}` | `200 OK` | Devuelve un lugar existente. |
-| Actualizar | `PUT /api/Venue` | `200 OK` | Actualiza el lugar indicado por `id`. |
+| Actualizar | `PUT /api/Venue/{id}` | `200 OK` | Actualiza el lugar indicado por `id`. |
 | Eliminar | `DELETE /api/Venue/{id}` | `204 No Content` | Elimina el lugar indicado por `id`. |
 
 Los listados admiten `page`, `size` y `sort`, con los mismos valores por defecto que el listado de eventos.
@@ -298,7 +309,7 @@ curl -X POST http://localhost:8080/api/Venue/crear \
 Ejemplo para actualizar un evento:
 
 ```bash
-curl -X PUT http://localhost:8080/api/events \
+curl -X PUT http://localhost:8080/api/events/1 \
 	-H "Content-Type: application/json" \
 	-d '{"id":1,"nombre":"Conferencia Spring Boot actualizada","fecha":"2026-10-20","descripcion":"Contenido actualizado"}'
 ```
@@ -334,7 +345,7 @@ En Windows:
 .\mvnw.cmd test
 ```
 
-Las pruebas cubren el contexto de Spring Boot, los repositorios JPA y las reglas principales de los servicios de eventos y lugares, incluyendo creación, consulta, actualización, eliminación, duplicados y datos obligatorios.
+Las pruebas cubren el contexto de Spring Boot, los repositorios JPA, las reglas principales de los servicios y los controladores web. Las pruebas MockMvc de `EventsWebController` y `VenueWebController` comprueban respuestas `200 OK`, nombres de vista y atributos del modelo para listados, formularios y detalles, incluidos listados vacíos.
 
 ## Árbol de archivos
 
@@ -366,9 +377,22 @@ Eventify/
 │   │   │   ├── service/
 │   │   │   │   ├── EventsService.java
 │   │   │   │   └── VenueService.java
+│   │   │   ├── web/
+│   │   │   │   ├── EventsWebController.java
+│   │   │   │   └── VenueWebController.java
 │   │   │   └── EventifyApplication.java
 │   │   └── resources/
-│   │       └── application.properties
+│   │       ├── application.properties
+│   │       └── templates/
+│   │           ├── Index.html
+│   │           ├── events/
+│   │           │   ├── Detail.html
+│   │           │   ├── Form.html
+│   │           │   └── List.html
+│   │           └── venue/
+│   │               ├── Detail.html
+│   │               ├── Form.html
+│   │               └── List.html
 │   └── test/java/com/eventify/
 │       ├── repository/
 │       │   ├── EventsRepositoryTest.java
@@ -376,6 +400,9 @@ Eventify/
 │       ├── service/
 │       │   ├── EventsServiceTest.java
 │       │   └── VenueServiceTets.java
+│       ├── web/
+│       │   ├── EventsWebControllerTest.java
+│       │   └── VenueWebControllerTest.java
 │       └── EventifyApplicationTests.java
 ├── .gitignore
 ├── HELP.md
@@ -391,4 +418,3 @@ Eventify/
 - No hay autenticación ni autorización configuradas.
 - La aplicación no define un puerto personalizado; utiliza el puerto `8080` por defecto.
 - Los métodos de búsqueda por nombre de los repositorios todavía no están expuestos como endpoints HTTP.
-- El endpoint de actualización de lugares está declarado como `PUT /api/Venue`, aunque su método recibe un `id` mediante `@PathVariable`; esta ruta debe revisarse antes de consumirla.
